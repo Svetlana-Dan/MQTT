@@ -1,82 +1,110 @@
-from operator import ne
-import serial.tools.list_ports
-import serial as sr
+import time
 import paho.mqtt.client as mqtt_client
-import time, random
-import numpy as np
+import random
+import serial
 
-def map(value, in_min, in_max, out_min, out_max):
-    return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+port = "COM9"
+ser = serial.Serial(port, 9600)
 
-def help_note():
-    print(
-"""List of commands:
-0 - Exit
-1 - Send current value
-2 - Send mean value
-3 - Stream (20 seconds)
-4 - Stream min, max and current values (20 seconds)
-5 - Print list of commands"""
-    )
+mean = 0
+otvet = 0
+# max_porog = 0
+# min_porog = 0
+listic = []
+listic_len = 5
 
-port="COM7"
-broker = "broker.emqx.io"
-my_id = 999
-duration = 20
-queue = []
-avg_value = 0
-need_input = True
-max_val = 0
-min_val = 0
-client = mqtt_client.Client(f'lab_{random.randint(10000, 999999)}')
-client.connect(broker)
-arduino = sr.Serial(port=port, baudrate=9600)
+def po_porogu(data, topic):
+    global otvet
+    global mean
+    if("/mean" in topic):
+        mean = float(data)
+    elif("/porog" in topic):
+        otvet = int(data)
+    # else:
+    #     mean = (max_porog + min_porog) / 2
+    if (otvet >= mean):
+        ser.write("1".encode())
+    else:
+        ser.write("0".encode())
+    print("mean =", mean, "data =", data)
+    # ser.write("1".encode())
 
-help_note()
-while True:
-    if need_input:
-        command = int(input("Input: "))
-    if (command == 5):
-        help_note()
-        continue
-    elif (command == 0):
-        arduino.close()
-        break
+def dec_inc(data):
+    print(f"recieved sensor level{ data}")
+    global listic
+    if(len(listic)>1):
+        down = 0
+        up = 0
+        for i in range(1, len(listic)):
+            if (listic[i] < listic[i-1] or listic[i] == listic[i-1]):
+                down += 1
+        for i in range(1, len(listic)):
+            if (listic[i] >= listic[i-1] or listic[i] == listic[i-1]):
+                up += 1
+        if(down == len(listic)-1):
+            ser.write("1".encode())
+        elif(up == len(listic)-1):
+            ser.write("0".encode())
+
     
-    arduino.write(np.array([1], dtype='uint8').tobytes())
-    time.sleep(0.01)
+def write(data):
+    print(f"recieved command {data}")
+    if (data == "1"):
+        ser.write("1".encode())
+        time.sleep(2)
+    if (data =="0"):
+        ser.write("0".encode())
+        time.sleep(2)
 
-    while arduino.inWaiting() < 2:
-        pass
+def on_message(client, userdata, message):
+    data = str(message.payload.decode("utf-8"))
+    topic = message.topic
+    global listic
+    global listic_len
+    #topic = str(message.topic.decode("utf-8"))
+    print(f"Received meassage on topic: {data}")
+    if ("/stream4" in topic):
+        listic.append(data)
+        if len(listic) > listic_len:
+            listic.pop(0)
+        dec_inc(data)
 
-    response = arduino.read(2)  # Прочитали
-    response = [int(byte_) for byte_ in response]   # массив байт в массив int8
-    response = (response[0] << 8 & 0xFF00) + (response[1] & 0xFF)   # Взяли число
-    response = map(response, 0, 1024, 0, 100)   # Смена диапазона
-    queue = [response] + queue  # Фиксируем новое значение
-    avg_value += response
-    if len(queue) >= 100:
-        avg_value -= queue.pop()
+    if ("/mean" in topic or "/porog" in topic):
+        po_porogu(data, topic)
+    #     stack.append(data)
+    # po_porogu(data, topic)
+    return data
 
-    if command == 1:
-        client.publish(f'lab/{my_id}/photo/instant', response) 
-    elif command == 2:
-        client.publish(f'lab/{my_id}/photo/averge', avg_value/len(queue)) 
-    elif command == 3:
-        if need_input:
-            timer_start = time.time()
-            need_input = False
-        if time.time() - timer_start >= duration:
-            need_input = True
-        client.publish(f'lab/{my_id}/photo/stream', response)
-    elif command == 4:
-        if need_input:
-            timer_start = time.time()
-            need_input = False
-        if time.time() - timer_start >= duration:
-            need_input = True
-        client.publish(f'lab/{my_id}/photo/max', max(queue))
-        client.publish(f'lab/{my_id}/photo/min', min(queue))
-        client.publish(f'lab/{my_id}/photo/porog', response)
+broker="broker.emqx.io"
 
+client = mqtt_client.Client(f'lab_{random.randint(10000, 99999)}')
+client.on_message = on_message
+
+try:
+    client.connect(broker)
+except Exception:
+    print('Failed to connect. Check network')
+    exit()
+    
+client.loop_start()
+
+# wait_time = 5
+# sleep_time = 1    
+# while not client.is_connected():
+#     time.sleep(sleep_time)
+#     wait_time -= sleep_time
+#     if not wait_time:
+#         raise ValueError('Failed to connect. Timeout')
+    
+print('Subscribing')
+client.subscribe('lab/UNIQUE_ID/photo/instant')
+client.subscribe('lab/UNIQUE_ID/photo/averge')
+client.subscribe('lab/UNIQUE_ID/photo/stream')
+client.subscribe('lab/UNIQUE_ID/photo/stream4')
+client.subscribe('lab/UNIQUE_ID/photo/mean')
+# client.subscribe('lab/UNIQUE_ID/photo/min')
+client.subscribe('lab/UNIQUE_ID/photo/porog')
+time.sleep(600)
 client.disconnect()
+client.loop_stop()
+print('Stop communication')
