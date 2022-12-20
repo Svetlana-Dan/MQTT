@@ -54,12 +54,12 @@ if __name__ == '__main__': //подключаемся и выводим сооб
             client.publish('lab/UNIQUE_ID/photo/averge', avg) //передаем средние данные
         elif command == 3:
             if stinput:
-                timer_start = time.time() //
+                timer_start = time.time() //начинаем считать время и перестаем считать команды
                 stinput = False
-            if time.time() - timer_start >= duration:
+            if time.time() - timer_start >= duration: //если время закончилось мы снова приримаем командв
                 stinput = True
-            client.publish('lab/UNIQUE_ID/photo/stream', result)
-        elif command == 4:
+            client.publish('lab/UNIQUE_ID/photo/stream', result) 
+        elif command == 4: //то же что и 3, отличия в другом файле
             if stinput:
                 timer_start = time.time()
                 stinput = False
@@ -67,11 +67,11 @@ if __name__ == '__main__': //подключаемся и выводим сооб
                 stinput = True
             client.publish('lab/UNIQUE_ID/photo/stream4', result)
         elif command == 5:
-            if stinput:
+            if stinput: 
                 timer_start = time.time()
                 stinput = False
             if time.time() - timer_start >= duration:
                 stinput = True
-            client.publish('lab/UNIQUE_ID/photo/mean', (max(arr) + min(arr)) / 2)
+            client.publish('lab/UNIQUE_ID/photo/mean', (max(arr) + min(arr)) / 2) //передаем порог
             client.publish('lab/UNIQUE_ID/photo/porog', result)
 client.disconnect()
