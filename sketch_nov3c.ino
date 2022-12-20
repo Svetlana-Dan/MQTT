@@ -9,14 +9,14 @@ void setup() {
 }
 
 void loop() {
-  while (Serial.available() > 0){
-    char message = Serial.read();
+  while (Serial.available() > 0){ //если что-то отправлено
+    char message = Serial.read(); //считываем сообщение из др комп
     Serial.println(message);
     switch(message) {
-      case '1':
+      case '1': //ззажигаем лампочку
         digitalWrite(led_pin, HIGH);
       break;
-      case '0':
+      case '0': //выключаем лампочку
         digitalWrite(led_pin, LOW);
       break;
     }
